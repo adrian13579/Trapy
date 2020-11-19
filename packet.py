@@ -55,7 +55,7 @@ class Packet:
                              )
         packet += self.data
         self.checksum = (~checksum(packet)) & 0xffff
-        print(bin(self.checksum))
+        # print(bin(self.checksum))
         packet = struct.pack(self._format,
                              self.src_port,
                              self.dest_port,
@@ -67,7 +67,7 @@ class Packet:
                              self.checksum
                              )
         packet += self.data
-        print(bin(checksum(packet)))
+        # print(bin(checksum(packet)))
         return packet
 
     def unpack(self, packet: bytes) -> None:

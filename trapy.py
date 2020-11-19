@@ -19,6 +19,9 @@ class Conn:
                                       socket.IPPROTO_TCP)
         # self.__socket.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
 
+        self.sequence_number: int = 0
+        self.buffer: bytes = b''
+
         self._default_bufsize: int = 44
         self.__dest_address: Optional[Address] = None
         self.__port: int = 0
@@ -189,19 +192,17 @@ def send(conn: Conn, data: bytes) -> int:
 
 
 def recv(conn: Conn, length: int) -> bytes:
-    data_recv = bytearray(0)
-    seq_number = 0
-    while len(data_recv) < length:
+    while len(conn.buffer) < length:
         recv_packet, _ = conn.recv(timeout=2)
         if recv_packet is not None:
             print(f'Packet recv: {recv_packet.build()}')
 
-            if recv_packet.seq_number == bit32_sum(seq_number, 1):
-                seq_number = recv_packet.seq_number
-                data_recv += recv_packet.data[:recv_packet.data_len]
+            if recv_packet.seq_number == bit32_sum(conn.sequence_number, 1):
+                conn.sequence_number = recv_packet.seq_number
+                conn.buffer += recv_packet.data[:recv_packet.data_len]
                 print(recv_packet.data_len)
                 print(recv_packet.data[:recv_packet.data_len])
-                print(data_recv)
+                print(conn.buffer)
 
             conn.send(Packet(
                 src_port=conn.get_port(),
@@ -214,7 +215,10 @@ def recv(conn: Conn, length: int) -> bytes:
                 ack=bit32_sum(recv_packet.seq_number, 1),
             ).build()
             print(f"Packet send: {p}")
-        print(f"Datarecv: {len(data_recv)}")
+        print(f"Datarecv: {len(conn.buffer)}")
+
+    data_recv = conn.buffer[:length]
+    conn.buffer = conn.buffer[length:]
     return data_recv
 
 

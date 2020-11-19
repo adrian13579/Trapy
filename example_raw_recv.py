@@ -9,7 +9,7 @@ s.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
 
 s.bind(('', 5555))
 
-#s1 = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+# s1 = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 
 # s1.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
 
@@ -33,12 +33,15 @@ s.bind(('', 5555))
 # packet.unpack(data2)
 # print(packet.data)
 # print("--------------------------")
-server = listen('127.0.0.1:1234')
+server = listen('10.0.0.2:1234')
 print('Listen finished')
 conn = accept(server)
 print('Accept ')
 # print(recv(conn, 5))
-print(recv(conn, 10))
+print(recv(conn, 1))
+print("Recibiiiiiiiiiiiiiiiiiiiiiiiiiiii")
+print(recv(conn, 9))
+
 #  print(len(data))
 #  data = struct.unpack("?i",data.decode())
 # # print(a)
