@@ -2,6 +2,7 @@ import socket
 import struct
 from trapy import *
 from packet import *
+from trapy import divide_data
 
 s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 
@@ -17,14 +18,10 @@ tcp_header += b'\x00\x00\x00\x00'  # Acknowledgement Number
 tcp_header += b'\x50\x02\x71\x10'  # Data Offset, Reserved, Flags | Window Size
 tcp_header += b'\xe6\x32\x00\x00'  # Checksum | Urgent Pointer
 
-# packet = ip_header + tcp_header
+packet = ip_header + tcp_header
+# s.sendto(tcp_header, ('10.0.0.2', 0))
 
-
-packet = Packet(flags=1, data=b'\xe6\x32\x00\x00')
-packet.src_port = 1222
-
-packet = packet.build()
-
-conn = dial('10.0.0.2:1234')
-
-# s.sendto(packet, ('10.0.0.2', 0))
+conn = dial('127.0.0.1:1234')
+data = b'\x11\x22\x33\x44\x55\x66\x77\x88\x99\x33'
+# # print(divide_data(data, 6))
+send(conn, data)
