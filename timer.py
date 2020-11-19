@@ -1,4 +1,3 @@
-# timer.py - A timer class
 import time
 
 
@@ -29,3 +28,7 @@ class Timer(object):
             return False
         else:
             return time.time() - self._start_time >= self._duration
+
+    # Current time since timer started in seconds
+    def time(self):
+        return time.time() - self._start_time

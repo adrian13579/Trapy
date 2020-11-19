@@ -3,7 +3,6 @@ import struct
 from utils import checksum
 
 
-
 class PacketException(Exception):
     pass
 
@@ -18,7 +17,6 @@ class Packet:
                  data_len=0,
                  flags=0,
                  window=0,
-                 checksum=0,
                  ):
         self.src_port = src_port
         self.dest_port = dest_port
@@ -27,7 +25,7 @@ class Packet:
         self.data_len = data_len
         self.flags = flags
         self.window = window
-        self.checksum = checksum
+        self.checksum = 0
         self._max_size_data = 6
         self.data = data
         if data is None:
@@ -44,6 +42,7 @@ class Packet:
             self.data += bytearray(padding)
 
     def build(self) -> bytes:
+        self.checksum = 0
         packet = struct.pack(self._format,
                              self.src_port,
                              self.dest_port,
@@ -55,26 +54,25 @@ class Packet:
                              self.checksum
                              )
         packet += self.data
-        #self.checksum = ~checksum(packet)
-        # print(bin(self.checksum))
-        # packet = struct.pack(self._format,
-        #                      self.src_port,
-        #                      self.dest_port,
-        #                      self.seq_number,
-        #                      self.ack,
-        #                      self.data_len,
-        #                      self.flags,
-        #                      self.window,
-        #                      self.checksum
-        #                      )
-        # packet += self.data
+        self.checksum = (~checksum(packet)) & 0xffff
+        print(bin(self.checksum))
+        packet = struct.pack(self._format,
+                             self.src_port,
+                             self.dest_port,
+                             self.seq_number,
+                             self.ack,
+                             self.data_len,
+                             self.flags,
+                             self.window,
+                             self.checksum
+                             )
+        packet += self.data
+        print(bin(checksum(packet)))
         return packet
 
     def unpack(self, packet: bytes) -> None:
         self.data = packet[18:18 + self._max_size_data]
-        # self.data = self.data[:self.data_len]
         packet = packet[:18]
-        #print(self.data)
         info = struct.unpack(self._format, packet)
         self.src_port = info[0]
         self.dest_port = info[1]

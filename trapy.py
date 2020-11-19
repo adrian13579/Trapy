@@ -1,6 +1,6 @@
 import socket
 import os
-from typing import Tuple, Any
+from typing import Tuple, Any, Optional
 import random
 from packet import Packet
 from timer import Timer
@@ -19,28 +19,27 @@ class Conn:
                                       socket.IPPROTO_TCP)
         # self.__socket.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
 
-        self._default_bufsize = 44
-        self.__dest_address: Address = None
-        self.__port = 0
-        self.__host = ''
-        self.timeout = 3
-        self._set_timeout(self.timeout)
+        self._default_bufsize: int = 44
+        self.__dest_address: Optional[Address] = None
+        self.__port: int = 0
+        self.__host: str = ''
+        self._set_timeout(3)
 
-    def _set_timeout(self, interval: float):
+    def _set_timeout(self, interval: float) -> None:
         self.__socket.settimeout(interval)
 
-    def get_port(self):
+    def get_port(self) -> int:
         return self.__port
 
-    def get_dest_address(self):
+    def get_dest_address(self) -> Address:
+        if self.__dest_address is None:
+            raise ConnException("Destination address is not set")
         return self.__dest_address
 
-    def set_dest(self, address: Address):
-        if self.__dest_address is not None:
-            raise ConnException(f"Destination address already set :{self.__dest_address}")
+    def set_dest(self, address: Address) -> None:
         self.__dest_address = address
 
-    def bind(self, address: Address = None):
+    def bind(self, address: Address = None) -> None:
         if address is None:
             address = ('', get_free_port(path))
         #
@@ -61,36 +60,32 @@ class Conn:
         # file.close()
         logger.info(f'socket binded to address {address}')
 
-    def recv(self) -> Tuple[Packet, Any]:
+    def recv(self, timeout=3) -> Tuple[Optional[Packet], Any]:
         packet = Packet()
         address = ('', 0)
-        time = 0
-        self._set_timeout(self.timeout)
+        self._set_timeout(timeout)
+        timer = Timer(timeout)
+        timer.start()
         while True:
             try:
-                time = self.__socket.gettimeout()
                 data2, address = self.__socket.recvfrom(self._default_bufsize)
                 data = data2[20:]
                 packet.unpack(data)
             except socket.timeout:
-                self.timeout = max(0, self.timeout - time)
-                self._set_timeout(self.timeout)
+                timeout = timeout - timer.time()
 
             if packet.dest_port == self.__port:
                 return packet, address
 
-            if self.timeout <= 0:
+            if timer.timeout():
                 return None, None
+            self._set_timeout(timeout)
 
-    def send(self, data: bytes):
+    def send(self, data: bytes) -> int:
         if self.__dest_address is None:
             raise ConnException("Destination address is not set")
         # data = make_ip_header(self.__dest_address[0]) + data
         return self.__socket.sendto(data, self.__dest_address)
-
-    def sendto(self, data: bytes, address: Address):
-        # data = make_ip_header(address[0]) + data
-        return self.__socket.sendto(data, address)
 
 
 class ConnException(Exception):
@@ -106,15 +101,16 @@ def listen(address: str) -> Conn:
 
 def accept(conn: Conn) -> Conn:
     while True:
-        print(conn.timeout)
-        recv_packet, address = conn.recv()
+        recv_packet, address = conn.recv(timeout=2)
 
         if recv_packet is None:
             continue
 
         if index_bit(recv_packet.flags, SYN):
             print("First Packet Recv")
+
             print(recv_packet.build())
+            conn.set_dest((address[0], recv_packet.src_port))
             packet = Packet(flags=0b00000001,
                             ack=bit32_sum(
                                 recv_packet.seq_number, 1
@@ -123,13 +119,11 @@ def accept(conn: Conn) -> Conn:
                             dest_port=recv_packet.src_port,
                             src_port=conn.get_port()
                             )
-            conn.sendto(packet.build(), (address[0], recv_packet.src_port))
-            conn.timeout = 3
-            recv_packet2, _ = conn.recv()
+            conn.send(packet.build())
+            recv_packet2, _ = conn.recv(timeout=2)
             if recv_packet2 is None:
                 continue
             if recv_packet2.ack == 1 and not index_bit(recv_packet2.flags, SYN):
-                conn.set_dest((address[0], recv_packet.src_port))
                 return conn
 
 
@@ -146,10 +140,8 @@ def dial(address: str) -> Conn:
                         src_port=conn.get_port(),
                         dest_port=address[1],
                         )
-        # print(packet.build())
         conn.send(packet.build())
-        conn.timeout = 3
-        packet_recv, _ = conn.recv()
+        packet_recv, _ = conn.recv(timeout=2)
         if packet_recv is None:
             continue
         if packet_recv.ack == bit32_sum(packet.seq_number, 1) and index_bit(packet_recv.flags, SYN):
@@ -164,8 +156,7 @@ def dial(address: str) -> Conn:
 def send(conn: Conn, data: bytes) -> int:
     seq_number = 1
     print(data)
-    packets_data = divide_data(data, 2)
-    timeout = 1
+    packets_data = divide_data(data, 3)
     timer = Timer(2)
     ack_recv = False
     while seq_number <= len(packets_data) or not ack_recv:
@@ -185,8 +176,7 @@ def send(conn: Conn, data: bytes) -> int:
         ).build()
         print(f'Packet send: {p}')
         timer.start()
-        conn.timeout = timeout
-        recv_packet, _ = conn.recv()
+        recv_packet, _ = conn.recv(timeout=2)
         if recv_packet is not None:
             print(f'Packet recv: {recv_packet.build()}')
 
@@ -202,8 +192,7 @@ def recv(conn: Conn, length: int) -> bytes:
     data_recv = bytearray(0)
     seq_number = 0
     while len(data_recv) < length:
-        conn.timeout = 1
-        recv_packet, _ = conn.recv()
+        recv_packet, _ = conn.recv(timeout=2)
         if recv_packet is not None:
             print(f'Packet recv: {recv_packet.build()}')
 

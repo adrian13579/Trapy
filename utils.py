@@ -9,20 +9,6 @@ SYN = 0
 FIN = 1
 
 
-def chksum(packet):
-    res = sum(array.array("H", packet))
-    res = (res >> 16) + (res & 0xffff)
-    res += res >> 16
-    return (~res) & 0xffff
-
-
-def chksum2(packet):
-    res = sum(array.array("H", packet))
-    res = (res >> 16) + (res & 0xffff)
-    res += res >> 16
-    return res
-
-
 def make_ip_header(dest: str) -> bytes:
     ip_header = b'\x45\x00\x00\x28'  # Version, IHL, Type of Service | Total Length
     ip_header += b'\xab\xcd\x00\x00'  # Identification | Flags, Fragment Offset
@@ -65,7 +51,7 @@ def checksum(packet: bytes) -> int:
     bit_sum = 0
     for i in range(0, len(packet), 2):
         bit_sum += int.from_bytes(packet[i:i + 2], byteorder='big')
-        bit_sum &= 0xffff
+        bit_sum = (bit_sum >> 16) + (bit_sum & 0xffff)
     return bit_sum
 
 

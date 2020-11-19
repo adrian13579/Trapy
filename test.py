@@ -1,7 +1,7 @@
 import socket
 from typing import List
 
-from trapy import get_free_port, Conn, path, parse_address, Packet, random, chksum, chksum2
+from trapy import get_free_port, Conn, path, parse_address, Packet, random, checksum  # checksum2
 
 
 # a = get_free_port(path)
@@ -39,16 +39,10 @@ def divide_data(data: bytes, length: int) -> List[bytes]:
 # print(bin(chksum(a)))
 # print(bin(chksum2(a)))
 # b = divide_data(a, 2)
-s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-s.settimeout(0)
-try:
-    print(s.gettimeout())
-    s.recvfrom(1213)
-except:
-    print(s.gettimeout())
+# s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 # print(b)
 # for i in b:
-    # print(len(i))
+# print(len(i))
 # address = '10.0.0.2:1234'
 # seq_number = random.randint(0, 2 ** 32 - 1)
 # conn = Conn()
@@ -62,3 +56,14 @@ except:
 #            ).build()
 #
 # print(a)
+
+a = Packet(src_port=1234, dest_port=4434, data=b'\x99')
+packet = a.build()
+s = (~checksum(packet)) & 0xffff
+print(s, bin(s))
+
+
+b = Packet(src_port=1234, dest_port=4434, data=b'\x99', checksum=s).build()
+print(len(packet))
+print(len(b))
+print(bin(checksum(b)))
