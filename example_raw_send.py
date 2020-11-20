@@ -21,7 +21,7 @@ tcp_header += b'\xe6\x32\x00\x00'  # Checksum | Urgent Pointer
 packet = ip_header + tcp_header
 # s.sendto(tcp_header, ('10.0.0.2', 0))
 
-conn = dial('10.0.0.2:1234')
+conn = dial('127.0.0.1:1234')
 data = b'\x11\x22\x33\x44\x55\x66\x77\x88\x99\x33'
 # # print(divide_data(data, 6))
 send(conn, data)

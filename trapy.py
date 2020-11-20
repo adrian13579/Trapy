@@ -19,16 +19,19 @@ class Conn:
                                       socket.IPPROTO_TCP)
         # self.__socket.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
 
+        self.N: int = 4
+        self.send_base: int = 0
+
         self.sequence_number: int = 0
         self.buffer: bytes = b''
 
-        self._default_bufsize: int = 44
+        self.__default_bufsize: int = 44
         self.__dest_address: Optional[Address] = None
         self.__port: int = 0
         self.__host: str = ''
-        self._set_timeout(3)
+        self.__set_timeout(3)
 
-    def _set_timeout(self, interval: float) -> None:
+    def __set_timeout(self, interval: float) -> None:
         self.__socket.settimeout(interval)
 
     def get_port(self) -> int:
@@ -66,12 +69,12 @@ class Conn:
     def recv(self, timeout=3) -> Tuple[Optional[Packet], Any]:
         packet = Packet()
         address = ('', 0)
-        self._set_timeout(timeout)
+        self.__set_timeout(timeout)
         timer = Timer(timeout)
         timer.start()
         while True:
             try:
-                data2, address = self.__socket.recvfrom(self._default_bufsize)
+                data2, address = self.__socket.recvfrom(self.__default_bufsize)
                 data = data2[20:]
                 packet.unpack(data)
             except socket.timeout:
@@ -82,7 +85,7 @@ class Conn:
 
             if timer.timeout():
                 return None, None
-            self._set_timeout(timeout)
+            self.__set_timeout(timeout)
 
     def send(self, data: bytes) -> int:
         if self.__dest_address is None:
@@ -157,36 +160,42 @@ def dial(address: str) -> Conn:
 
 
 def send(conn: Conn, data: bytes) -> int:
-    seq_number = 1
-    print(data)
     packets_data = divide_data(data, 3)
-    timer = Timer(2)
-    ack_recv = False
-    while seq_number <= len(packets_data) or not ack_recv:
-        conn.send(Packet(
-            src_port=conn.get_port(),
-            dest_port=conn.get_dest_address()[1],
-            seq_number=seq_number,
-            data_len=len(packets_data[seq_number - 1]),
-            data=packets_data[seq_number - 1]
-        ).build())
-        p = Packet(
-            src_port=conn.get_port(),
-            dest_port=conn.get_dest_address()[1],
-            seq_number=seq_number,
-            data_len=len(packets_data[seq_number - 1]),
-            data=packets_data[seq_number - 1]
-        ).build()
-        print(f'Packet send: {p}')
+    conn.send_base = 0
+    timers = [Timer(0) for _ in range(len(packets_data))]
+    for timer in timers:
         timer.start()
-        recv_packet, _ = conn.recv(timeout=2)
-        if recv_packet is not None:
-            print(f'Packet recv: {recv_packet.build()}')
+    print(packets_data)
+    while conn.send_base < len(packets_data):
+        window = range(conn.send_base, min(conn.send_base+conn.N, len(packets_data)))
+        for packet_index in window:
+            if timers[packet_index].timeout():
+                p = Packet(src_port=conn.get_port(),
+                           dest_port=conn.get_dest_address()[1],
+                           seq_number=(packet_index + 1) & 0xffffffff,
+                           data_len=len(packets_data[packet_index]),
+                           data=packets_data[packet_index])
+                print(f'PACKET SEND:{p.build()}')
+                conn.send(p.build())
+                timers[packet_index] = Timer(2)
+                timers[packet_index].start()
 
+        recv_packet, _ = conn.recv()
         if recv_packet is not None:
-            if recv_packet.ack == bit32_sum(seq_number, 1):
-                seq_number = recv_packet.ack
-                ack_recv = True
+            print(f"PACKET RECV:{recv_packet.build()}")
+            acks_recv = -1
+            window = range(conn.send_base, min(conn.send_base+conn.N, len(packets_data)))
+            for packet_index in window:
+                if (packet_index + 2) & 0xffffffff == recv_packet.ack:
+                    acks_recv = packet_index
+                    if packet_index == conn.send_base:
+                        conn.send_base += 1
+                    break
+
+            window = range(conn.send_base, min(conn.send_base+conn.N, len(packets_data)))
+            for packet_index in window:
+                if packet_index <= acks_recv:
+                    timers[packet_index].stop()
 
     return len(data)
 
@@ -204,18 +213,18 @@ def recv(conn: Conn, length: int) -> bytes:
                 print(recv_packet.data[:recv_packet.data_len])
                 print(conn.buffer)
 
-            conn.send(Packet(
-                src_port=conn.get_port(),
-                dest_port=conn.get_dest_address()[1],
-                ack=bit32_sum(recv_packet.seq_number, 1),
-            ).build())
-            p = Packet(
-                src_port=conn.get_port(),
-                dest_port=conn.get_dest_address()[1],
-                ack=bit32_sum(recv_packet.seq_number, 1),
-            ).build()
-            print(f"Packet send: {p}")
-        print(f"Datarecv: {len(conn.buffer)}")
+                conn.send(Packet(
+                    src_port=conn.get_port(),
+                    dest_port=conn.get_dest_address()[1],
+                    ack=bit32_sum(recv_packet.seq_number, 1),
+                ).build())
+                p = Packet(
+                    src_port=conn.get_port(),
+                    dest_port=conn.get_dest_address()[1],
+                    ack=bit32_sum(recv_packet.seq_number, 1),
+                ).build()
+                print(f"Packet send: {p}")
+            print(f"Datarecv: {len(conn.buffer)}")
 
     data_recv = conn.buffer[:length]
     conn.buffer = conn.buffer[length:]
