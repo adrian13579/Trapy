@@ -26,7 +26,7 @@ class Packet:
         self.flags = flags
         self.window = window
         self.checksum = 0
-        self._max_size_data = 10
+        self._max_size_data = 2048
         self.data = data
         if data is None:
             self.data = bytearray(0)

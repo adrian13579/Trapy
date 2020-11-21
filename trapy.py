@@ -22,7 +22,7 @@ class Conn:
 
         self.duration = 30
 
-        self.N: int = 4
+        self.N: int = 10
         self.send_base: int = 0
         # self.send_sequence_number: int = 0
 
@@ -30,7 +30,7 @@ class Conn:
         self.buffer: bytes = b''
         # bufsize =  ip_header + my_protocol_header + data
 
-        self.max_data_packet = 10
+        self.max_data_packet = 2048
         self.__default_bufsize: int = 20 + 20 + self.max_data_packet
         self.__dest_address: Optional[Address] = None
         self.__port: int = 0
@@ -196,6 +196,7 @@ def send(conn: Conn, data: bytes) -> int:
     print(packets_data)
     while conn.send_base < len(packets_data) and not sender_timer.timeout():
         window = range(conn.send_base, min(conn.send_base + conn.N, len(packets_data)))
+        print(f'Window size: {len(window)}')
         for packet_index in window:
             if timers[packet_index].timeout():
                 flags = 0
@@ -208,8 +209,7 @@ def send(conn: Conn, data: bytes) -> int:
                            data=packets_data[packet_index],
                            flags=flags)
 
-                print(f'PACKET SEND:{p.build()}')
-                print(p.seq_number)
+                print(f'SeqNUm send:{p.seq_number}')
                 conn.send(p.build())
                 timers[packet_index] = Timer(2)
                 timers[packet_index].start()
@@ -221,12 +221,14 @@ def send(conn: Conn, data: bytes) -> int:
             sender_timer = Timer(conn.duration)
             sender_timer.start()
 
-            print(f"PACKET RECV:{recv_packet.build()}")
+            print(f"Ack recv:{recv_packet.ack}")
             acks_recv = -1
             window = range(conn.send_base, min(conn.send_base + conn.N, len(packets_data)))
             for packet_index in window:
                 if (packet_index + 2) & 0xffffffff == recv_packet.ack:
                     acks_recv = packet_index
+                    if packet_index > conn.send_base:
+                        conn.send_base = packet_index
                     if packet_index == conn.send_base:
                         conn.send_base += 1
                     break
@@ -250,11 +252,8 @@ def recv(conn: Conn, length: int) -> bytes:
             recv_timer = Timer(conn.duration)
             recv_timer.start()
 
-            print(f'Packet recv: {recv_packet.data}')
-
-            if index_bit(recv_packet.flags, LAST):
-                flags = LAST_FLAG
-
+            print(f'SeqNum recv: {recv_packet.seq_number}')
+            print(f'Expected seq: {conn.recv_sequence_number + 1}')
             # last ack was not recv in sender so it sends back the same ack
             if recv_packet.seq_number == conn.recv_sequence_number:
                 conn.send(Packet(
@@ -263,34 +262,30 @@ def recv(conn: Conn, length: int) -> bytes:
                     ack=bit32_sum(recv_packet.seq_number, 1),
                     flags=flags
                 ).build())
+
             if recv_packet.seq_number == bit32_sum(conn.recv_sequence_number, 1):
                 conn.recv_sequence_number = recv_packet.seq_number
                 conn.buffer += recv_packet.data[:recv_packet.data_len]
-                # print(recv_packet.data_len)
-                # print(recv_packet.data[:recv_packet.data_len])
-                # print(conn.buffer)
 
-                conn.send(Packet(
-                    src_port=conn.get_port(),
-                    dest_port=conn.get_dest_address()[1],
-                    ack=bit32_sum(recv_packet.seq_number, 1),
-                    flags=flags
-                ).build())
+                if index_bit(recv_packet.flags, LAST):
+                    flags = LAST_FLAG
 
-                p = Packet(
-                    src_port=conn.get_port(),
-                    dest_port=conn.get_dest_address()[1],
-                    ack=bit32_sum(recv_packet.seq_number, 1),
-                    flags=flags
-                ).build()
-                print(f"Packet send: {p}")
-                print(f'Seq Num {conn.recv_sequence_number}')
+                count = 10 if flags == LAST_FLAG else 1
+                while count:
+                    conn.send(Packet(
+                        src_port=conn.get_port(),
+                        dest_port=conn.get_dest_address()[1],
+                        ack=bit32_sum(recv_packet.seq_number, 1),
+                        flags=flags
+                    ).build())
+                    print(f"Ack send: {bit32_sum(recv_packet.seq_number, 1)}")
+                    count -= 1
 
             if flags == LAST_FLAG:
                 conn.recv_sequence_number = 0
                 break
 
-            print(f"Datarecv: {len(conn.buffer)}")
+            # print(f"Datarecv: {len(conn.buffer)}")
 
     data_recv = conn.buffer[:length]
     conn.buffer = conn.buffer[length:]
