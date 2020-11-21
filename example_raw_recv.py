@@ -17,8 +17,11 @@ s.bind(('', 5555))
 
 # while True:
 #     print("First Part----------------------")
-#     data, a = s.recvfrom(65565)
+#     data, b = s.recvfrom(65565)
 #     print(data)
+#     a = Packet()
+#     a.unpack(data[20:])
+#     print(a.seq_number)
 #     data = data[20:]
 #     print(len(data))
 #     packet = Packet()
@@ -32,15 +35,24 @@ s.bind(('', 5555))
 # data2 = data2[20:]
 # packet.unpack(data2)
 # print(packet.data)
-# print("--------------------------")
+print("--------------------------")
 server = listen('127.0.0.1:1234')
 print('Listen finished')
 conn = accept(server)
 print('Accept ')
 # print(recv(conn, 5))
-print(recv(conn, 1))
+a = recv(conn, 15)
+print(f"RECIBIDO FINAL A: {a}  {len(a)}")
 print("Recibiiiiiiiiiiiiiiiiiiiiiiiiiiii")
-print(recv(conn, 9))
+# b = recv(conn, 7)
+# print(f"RECIBIDO FINAL B: {b} {len(b)}")
+#
+# c = recv(conn, 7)
+# print(f"RECIBIDO FINAL C: {c} {len(c)}")
+#
+# d = recv(conn, 3)
+# print(f"RECIBIDO FINAL D: {d} {len(d)}")
+
 
 #  print(len(data))
 #  data = struct.unpack("?i",data.decode())

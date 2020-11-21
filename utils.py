@@ -7,6 +7,15 @@ from typing import List
 
 SYN = 0
 FIN = 1
+LAST = 2
+
+SYN_FLAG = 0b00000001
+FIN_FLAG = 0b00000010
+LAST_FLAG = 0b00000100
+
+
+def corrupted(data: bytes):
+    return checksum(data) != 0xffff
 
 
 def make_ip_header(dest: str) -> bytes:

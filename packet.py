@@ -26,14 +26,14 @@ class Packet:
         self.flags = flags
         self.window = window
         self.checksum = 0
-        self._max_size_data = 6
+        self._max_size_data = 10
         self.data = data
         if data is None:
             self.data = bytearray(0)
         if len(self.data) > self._max_size_data:
             raise PacketException(f"Data size must not exceed {self._max_size_data} bytes")
 
-        self._format = "!HHIIBBHH"
+        self._format = "!HHIIHHHH"
         self._padding_data()
 
     def _padding_data(self):
@@ -55,7 +55,6 @@ class Packet:
                              )
         packet += self.data
         self.checksum = (~checksum(packet)) & 0xffff
-        # print(bin(self.checksum))
         packet = struct.pack(self._format,
                              self.src_port,
                              self.dest_port,
@@ -67,12 +66,11 @@ class Packet:
                              self.checksum
                              )
         packet += self.data
-        # print(bin(checksum(packet)))
         return packet
 
     def unpack(self, packet: bytes) -> None:
-        self.data = packet[18:18 + self._max_size_data]
-        packet = packet[:18]
+        self.data = packet[20:20 + self._max_size_data]
+        packet = packet[:20]
         info = struct.unpack(self._format, packet)
         self.src_port = info[0]
         self.dest_port = info[1]
@@ -82,3 +80,5 @@ class Packet:
         self.flags = info[5]
         self.window = info[6]
         self.checksum = info[7]
+
+
