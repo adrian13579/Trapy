@@ -25,6 +25,7 @@ conn = dial('10.0.0.2:1234')
 data = b'\x11\x22\x33\x44\x55\x66\x77\x88\x99\x33'
 # # print(divide_data(data, 6))
 print(send(conn, data))
+close(conn)
 #
 # print(send(conn, data))
 # a = Packet(seq_number=12, data=data).build()

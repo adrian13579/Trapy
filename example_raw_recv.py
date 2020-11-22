@@ -41,17 +41,19 @@ print('Listen finished')
 conn = accept(server)
 print('Accept ')
 # print(recv(conn, 5))
-a = recv(conn, 15)
+a = recv(conn, 1)
 print(f"RECIBIDO FINAL A: {a}  {len(a)}")
 print("Recibiiiiiiiiiiiiiiiiiiiiiiiiiiii")
+close(server)
+close(conn)
 # b = recv(conn, 7)
-# print(f"RECIBIDO FINAL B: {b} {len(b)}")
-#
-# c = recv(conn, 7)
-# print(f"RECIBIDO FINAL C: {c} {len(c)}")
-#
-# d = recv(conn, 3)
-# print(f"RECIBIDO FINAL D: {d} {len(d)}")
+print(f"RECIBIDO FINAL B: {b} {len(b)}")
+
+c = recv(conn, 7)
+print(f"RECIBIDO FINAL C: {c} {len(c)}")
+
+d = recv(conn, 3)
+print(f"RECIBIDO FINAL D: {d} {len(d)}")
 
 
 #  print(len(data))

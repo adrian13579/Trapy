@@ -14,7 +14,7 @@ path = "ports.trapy"
 
 class Conn:
     def __init__(self):
-        self._close = False
+        self.is_close = False
         self.__socket = socket.socket(socket.AF_INET,
                                       socket.SOCK_RAW,
                                       socket.IPPROTO_TCP)
@@ -30,7 +30,7 @@ class Conn:
         self.buffer: bytes = b''
 
         # bufsize =  ip_header + my_protocol_header + data
-        self.max_data_packet = 4096
+        self.max_data_packet = 128
         self.__default_bufsize: int = 20 + 20 + self.max_data_packet
         self.__dest_address: Optional[Address] = None
         self.__port: int = 0
@@ -62,7 +62,7 @@ class Conn:
         self.__port: int = 0
         self.__host: str = ''
 
-        self._close = True
+        self.is_close = True
 
     def bind(self, address: Address = None) -> None:
         if address is None:
@@ -156,13 +156,10 @@ def accept(conn: Conn) -> Conn:
             if recv_packet2 is None:
                 continue
             if recv_packet2.ack == 1 and not index_bit(recv_packet2.flags, SYN):
-                print("Conecendvioevn")
                 return conn_accepted
 
 
 def dial(address: str) -> Conn:
-    logger.info(f"insiede dial: {address}")
-
     conn = Conn()
     conn.bind()
     address = parse_address(address)
@@ -189,12 +186,14 @@ def dial(address: str) -> Conn:
                     ack=bit32_sum(packet_recv.seq_number, 1),
                     dest_port=conn.get_dest_address()[1],
                 ).build())
-                print("icdnvidvn")
                 count -= 1
             return conn
 
 
 def send(conn: Conn, data: bytes) -> int:
+    if conn.is_close:
+        return 0
+    data_send = 0
     sender_timer = Timer(conn.duration)
     sender_timer.start()
     packets_data = divide_data(data, conn.max_data_packet)
@@ -202,9 +201,11 @@ def send(conn: Conn, data: bytes) -> int:
     timers = [Timer(0) for _ in range(len(packets_data))]
     for timer in timers:
         timer.start()
-    print(packets_data)
     while conn.send_base < len(packets_data) and not sender_timer.timeout():
         window = range(conn.send_base, min(conn.send_base + conn.N, len(packets_data)))
+        logger.info(f"WINDOW SIZE: {len(window)}")
+        print(f"WINDOW SIZE: {len(window)}")
+
         for i, packet_index in enumerate(window):
             if timers[packet_index].timeout():
                 flags = 0
@@ -220,12 +221,24 @@ def send(conn: Conn, data: bytes) -> int:
                 print(f'SeqNum send:{p.seq_number}')
                 logger.info(f'SeqNum send:{p.seq_number}')
                 conn.send(p.build())
-                timers[packet_index] = Timer(0.5)
+                timers[packet_index] = Timer(1)
                 timers[packet_index].start()
 
         recv_packet, _ = conn.recv()
 
         if recv_packet is not None and not corrupted(recv_packet.build()):
+
+            # connection closed
+            if index_bit(recv_packet.flags, FIN) and recv_packet.src_port == conn.get_dest_address()[1]:
+                conn.send(Packet(
+                    src_port=conn.get_port(),
+                    dest_port=conn.get_dest_address()[1],
+                    ack=bit32_sum(recv_packet.seq_number, 1),
+                    flags=FIN_FLAG
+                ).build())
+                # data_send = conn.send_base - 1
+                conn.close()
+                return data_send
 
             sender_timer = Timer(conn.duration)
             sender_timer.start()
@@ -238,6 +251,7 @@ def send(conn: Conn, data: bytes) -> int:
             for i, packet_index in enumerate(window):
                 if (conn.send_base_sequence_number + i + 1) & 0xffffffff == recv_packet.ack:
                     acks_recv = packet_index
+                    data_send += len(packets_data[packet_index])
                     if packet_index > conn.send_base:
                         conn.send_base_sequence_number = recv_packet.ack
                         conn.send_base = packet_index
@@ -252,10 +266,13 @@ def send(conn: Conn, data: bytes) -> int:
                 if packet_index <= acks_recv:
                     timers[packet_index].stop()
 
-    return conn.send_base
+    return data_send
 
 
 def recv(conn: Conn, length: int) -> bytes:
+    if conn.is_close:
+        return b''
+
     recv_timer = Timer(conn.duration)
     recv_timer.start()
     while len(conn.buffer) < length and not recv_timer.timeout():
@@ -265,6 +282,23 @@ def recv(conn: Conn, length: int) -> bytes:
             flags = 0
             recv_timer = Timer(conn.duration)
             recv_timer.start()
+
+            # connection closed
+            if index_bit(recv_packet.flags, FIN) and recv_packet.src_port == conn.get_dest_address()[1]:
+                conn.send(Packet(
+                    src_port=conn.get_port(),
+                    dest_port=conn.get_dest_address()[1],
+                    ack=bit32_sum(recv_packet.seq_number, 1),
+                    flags=FIN_FLAG
+                ).build())
+                print(f'RECV SeqNum {recv_packet.seq_number}')
+                print(f'SEND Ack {bit32_sum(recv_packet.seq_number, 1)}')
+
+                print("FIN SEND ")
+                data_recv = conn.buffer[:length]
+                conn.buffer = conn.buffer[length:]
+                conn.close()
+                return data_recv
 
             print(f'SeqNum recv: {recv_packet.seq_number}')
             print(f'Expected SeqNum: {conn.recv_sequence_number + 1}')
@@ -296,7 +330,6 @@ def recv(conn: Conn, length: int) -> bytes:
                     ).build())
                     print(f"Ack send: {bit32_sum(recv_packet.seq_number, 1)}")
                     logger.info(f"Ack send: {bit32_sum(recv_packet.seq_number, 1)}")
-
                     count -= 1
 
             if flags == LAST_FLAG:
@@ -308,6 +341,32 @@ def recv(conn: Conn, length: int) -> bytes:
 
 
 def close(conn: Conn):
+    timer = Timer(conn.duration)
+    timer.stop()
+    seq_number_send = []
+    while not timer.timeout():
 
+        seq_num = random.randint(3, 2 ** 32 - 1)
+        seq_number_send.append(seq_num)
+        try:
+            conn.send(Packet(
+                src_port=conn.get_port(),
+                dest_port=conn.get_dest_address()[1],
+                flags=FIN_FLAG,
+                seq_number=seq_num
+            ).build())
+            print("FIN SEND")
+        except ConnException:
+            # conn already close or is a listen conn
+            break
+
+        recv_packet, _ = conn.recv()
+
+        if recv_packet is None or corrupted(recv_packet.build()):
+            continue
+
+        if index_bit(recv_packet.flags, FIN)\
+                and any(bit32_sum(i, 1) == recv_packet.ack for i in seq_number_send):
+            break
 
     conn.close()
