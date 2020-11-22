@@ -6,6 +6,5 @@ __all__ = [
     'accept',
     'send',
     'recv',
-    'close',
-    'IPPacket'
+    'close'
 ]

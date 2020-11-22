@@ -2,7 +2,7 @@ import socket
 import os
 from typing import Tuple, Any, Optional
 import random
-from trapy.packet import Packet, IPPacket
+from trapy.packet import Packet  # ,IPPacket
 from trapy.timer import Timer
 from trapy.utils import *
 import logging
@@ -352,7 +352,7 @@ def recv(conn: Conn, length: int) -> bytes:
 
 def close(conn: Conn):
     timer = Timer(conn.duration)
-    timer.stop()
+    timer.start()
     seq_number_send = []
     while not timer.timeout():
 
@@ -367,7 +367,7 @@ def close(conn: Conn):
             ).build())
             print("FIN SEND")
         except ConnException:
-            # conn already close or is a listen conn
+            # conn is already closed or it's a listen conn
             break
 
         recv_packet, _ = conn.recv()
