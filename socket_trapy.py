@@ -40,7 +40,7 @@ def dial(address):
     conn = Conn()
 
     host, port = parse_address(address)
-
+    # raise Exception(f"eovnrvirv {port} {host}")
     conn.socket.connect((host, port))
 
     return conn

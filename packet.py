@@ -1,6 +1,6 @@
 import struct
 
-from utils import checksum
+from trapy.utils import checksum
 
 
 class PacketException(Exception):
@@ -26,7 +26,7 @@ class Packet:
         self.flags = flags
         self.window = window
         self.checksum = 0
-        self._max_size_data = 2048
+        self._max_size_data = 4096
         self.data = data
         if data is None:
             self.data = bytearray(0)
