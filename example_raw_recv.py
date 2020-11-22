@@ -1,7 +1,7 @@
 import socket
 import struct
-from trapy import *
-from packet import Packet
+# from trapy import *
+# from packet import Packet
 
 s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
 
@@ -15,10 +15,10 @@ s.bind(('', 5555))
 
 # s1.bind(('', 6666))
 
-# while True:
-#     print("First Part----------------------")
-#     data, b = s.recvfrom(65565)
-#     print(data)
+while True:
+    print("First Part----------------------")
+    data, b = s.recvfrom(65565)
+    print(data)
 #     a = Packet()
 #     a.unpack(data[20:])
 #     print(a.seq_number)

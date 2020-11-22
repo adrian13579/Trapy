@@ -2,7 +2,7 @@ import socket
 import os
 from typing import Tuple, Any, Optional
 import random
-from trapy.packet import Packet
+from trapy.packet import Packet, IPPacket
 from trapy.timer import Timer
 from trapy.utils import *
 import logging
@@ -18,7 +18,7 @@ class Conn:
         self.__socket = socket.socket(socket.AF_INET,
                                       socket.SOCK_RAW,
                                       socket.IPPROTO_TCP)
-        # self.__socket.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
+        self.__socket.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
 
         self.duration = 30
 
@@ -30,7 +30,7 @@ class Conn:
         self.buffer: bytes = b''
 
         # bufsize =  ip_header + my_protocol_header + data
-        self.max_data_packet = 128
+        self.max_data_packet = 512
         self.__default_bufsize: int = 20 + 20 + self.max_data_packet
         self.__dest_address: Optional[Address] = None
         self.__port: int = 0
@@ -111,8 +111,11 @@ class Conn:
     def send(self, data: bytes) -> int:
         if self.__dest_address is None:
             raise ConnException("Destination address is not set")
-        # data = make_ip_header(self.__dest_address[0]) + data
+        data = make_ip_header(self.__dest_address[0]) + data
         # print(f'Data Send: {data}')
+        # ip = IPPacket(src='10.0.0.1', dst=self.__dest_address[0])
+        # ip_header = ip.assemble_ipv4_fields()
+        # data = ip_header + data
         return self.__socket.sendto(data, self.__dest_address)
 
 
@@ -265,7 +268,7 @@ def send(conn: Conn, data: bytes) -> int:
                     break
 
             if not window_timeout:
-                if windows_recv_packets >= conn.N:
+                if windows_recv_packets >= conn.N < 2 ** 31:
                     conn.N *= 2
                     windows_recv_packets = 0
             elif windows_recv_packets < conn.N != 1:

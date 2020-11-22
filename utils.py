@@ -31,8 +31,9 @@ def make_ip_header(dest: str) -> bytes:
         return temp2[0].split()[0]
 
     sub = subprocess.check_output(shlex.split(f'ip route get to {host}'))
-
+    # source_ip = subprocess.check_output(['hostname', '-s', '-I']).decode('utf-8')[:-1]
     source_ip = host_ip(sub)
+
     for i in source_ip.split('.'):
         ip_header += int(i).to_bytes(length=1, byteorder='little')
 
@@ -95,3 +96,4 @@ def get_free_port(path):
         return free_ports[index]
 
     return random.randint(1, 65536)
+
