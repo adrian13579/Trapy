@@ -22,7 +22,7 @@ class Conn:
 
         self.duration = 30
 
-        self.N: int = 256
+        self.N: int = 1
         self.send_base: int = 0
         self.send_base_sequence_number: int = 1
 
@@ -198,16 +198,21 @@ def send(conn: Conn, data: bytes) -> int:
     sender_timer.start()
     packets_data = divide_data(data, conn.max_data_packet)
     conn.send_base = 0
-    timers = [Timer(0) for _ in range(len(packets_data))]
-    for timer in timers:
-        timer.start()
+
+    timers = [Timer(1) for _ in range(len(packets_data))]
+    is_packet_send = [False for i in range(len(packets_data))]
+
+    print(f"LEN DATA: {len(packets_data)}")
+    windows_recv_packets = 0
+    window_timeout = False
     while conn.send_base < len(packets_data) and not sender_timer.timeout():
         window = range(conn.send_base, min(conn.send_base + conn.N, len(packets_data)))
-        logger.info(f"WINDOW SIZE: {len(window)}")
-        print(f"WINDOW SIZE: {len(window)}")
+
+        logger.info(f"WINDOW SIZE: {conn.N}")
+        print(f"WINDOW SIZE : {conn.N}")
 
         for i, packet_index in enumerate(window):
-            if timers[packet_index].timeout():
+            if not is_packet_send[packet_index] or timers[packet_index].timeout():
                 flags = 0
                 if packet_index == len(packets_data) - 1:
                     flags = LAST_FLAG
@@ -217,11 +222,15 @@ def send(conn: Conn, data: bytes) -> int:
                            data_len=len(packets_data[packet_index]),
                            data=packets_data[packet_index],
                            flags=flags)
-
+                is_packet_send[packet_index] = True
                 print(f'SeqNum send:{p.seq_number}')
                 logger.info(f'SeqNum send:{p.seq_number}')
                 conn.send(p.build())
-                timers[packet_index] = Timer(1)
+
+                if timers[packet_index].timeout():
+                    window_timeout = True
+
+                timers[packet_index] = Timer(0.5)
                 timers[packet_index].start()
 
         recv_packet, _ = conn.recv()
@@ -236,7 +245,6 @@ def send(conn: Conn, data: bytes) -> int:
                     ack=bit32_sum(recv_packet.seq_number, 1),
                     flags=FIN_FLAG
                 ).build())
-                # data_send = conn.send_base - 1
                 conn.close()
                 return data_send
 
@@ -246,25 +254,24 @@ def send(conn: Conn, data: bytes) -> int:
             print(f"Ack recv:{recv_packet.ack}")
             logger.info(f"Ack recv:{recv_packet.ack}")
 
-            acks_recv = -1
             window = range(conn.send_base, min(conn.send_base + conn.N, len(packets_data)))
             for i, packet_index in enumerate(window):
                 if (conn.send_base_sequence_number + i + 1) & 0xffffffff == recv_packet.ack:
-                    acks_recv = packet_index
                     data_send += len(packets_data[packet_index])
-                    if packet_index > conn.send_base:
+                    if packet_index >= conn.send_base:
+                        windows_recv_packets += (packet_index - conn.send_base) + 1
                         conn.send_base_sequence_number = recv_packet.ack
-                        conn.send_base = packet_index
-
-                    if packet_index == conn.send_base:
-                        conn.send_base += 1
-                        conn.send_base_sequence_number = recv_packet.ack
+                        conn.send_base = packet_index + 1
                     break
 
-            window = range(conn.send_base, min(conn.send_base + conn.N, len(packets_data)))
-            for packet_index in window:
-                if packet_index <= acks_recv:
-                    timers[packet_index].stop()
+            if not window_timeout:
+                if windows_recv_packets >= conn.N:
+                    conn.N *= 2
+                    windows_recv_packets = 0
+            elif windows_recv_packets < conn.N != 1:
+                conn.N //= 2
+                windows_recv_packets = 0
+                window_timeout = False
 
     return data_send
 
@@ -365,7 +372,7 @@ def close(conn: Conn):
         if recv_packet is None or corrupted(recv_packet.build()):
             continue
 
-        if index_bit(recv_packet.flags, FIN)\
+        if index_bit(recv_packet.flags, FIN) \
                 and any(bit32_sum(i, 1) == recv_packet.ack for i in seq_number_send):
             break
 
